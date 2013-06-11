@@ -82,8 +82,8 @@ int main(int argc, char* argv[])
 	// There must be exactly 4 args (arg[0] being the name of the prog)
 	if (argc != 4)
 	{
-		printf("Dude, don't break the program.\n");
-		exit(1);
+		print_usage(argv[0]);
+		exit_with_error(theFlag);
 	}
 	
 	// Get the values from the args.
@@ -96,8 +96,8 @@ int main(int argc, char* argv[])
 	// Check the args.  None of them should be 0 or lower.
 	if ((time_to_run <= 0) || (num_producers <= 0) || (num_consumers <= 0))
 	{
-		printf("Stop trying to break my program.\n");
-		exit(1);
+		print_usage(argv[0]);
+		exit_with_error(theFlag);
 	}
 
 	// Zero out the buffer, and set the position to the beginning
@@ -272,6 +272,26 @@ void print_buffer()
 	
 	// Then hand off printing.
 	print_stream(strng);
+}
+
+// Print the program usage on invalid input.
+void print_usage(char *name)
+{
+	printf("Please enter three positive integers for running time, number of producers, and number of consumers.\n");
+	printf("Usage: %s [running time in seconds] [number of producer threads] [number of consumer threads]\n", name);
+}
+
+// Displays a warning to the user along with a the usage of the program
+void exit_with_error(bool theFlag)
+{
+	// Do our easter egg check before error-exiting.
+	if (theFlag)
+	{
+		// This is a Hexadecimal string representation of ASCII values spelling out a phrase in Spanish.
+		ch("C2A1436172617920436175736579212044656A6520646520726F6D706572206D692070726F6772616D612E0D0A\0");
+	}
+	// Call exit with a non-zero value to indicate error.
+	exit(1);
 }
 
 // ch() is a part of the easter egg.  It is essentially a slightly obfuscated Hexadecimal -> ASCII printer.
