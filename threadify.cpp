@@ -47,11 +47,11 @@ void exit_with_error(bool theFlag = false);
 pthread_mutex_t buffer_mutex; // Mutual exclusive access semaphore
 sem_t empty_sem, full_sem;    // Semaphores for empty and full slot conditions
 
-// a buffer (array) of buffer_items (ints), and a global position tracker
+// a buffer (array) of buffer_items (ints), and a global buffer position tracker
 typedef int buffer_item;
 #define BUFFER_SIZE 5
 buffer_item buffer[BUFFER_SIZE];
-int BUF_POS;
+int BUF_POS; // BUF_POS will be protected by a mutex lock to prevent race conditions
 
 // main() initializes the PRNG, semaphores, checks command line arg validity
 // and then creates and starts the number of threads specified until the time specified is up.
@@ -163,7 +163,7 @@ void *producer(void *param)
 
 	do {
 		// a random wait time between 1 and 10 seconds.
-		// This simulates the consumer thread "doing something" with the item it just got.
+		// This simulates the producer thread "doing something" to produce a new item.
 		sleepytime = rand() % 10 + 1; // a random wait time between 1 and 10 seconds
 		strng << "Producer sleeping for: " << sleepytime << endl;
 		print_stream(strng);
@@ -287,7 +287,8 @@ void exit_with_error(bool theFlag)
 	// Do our easter egg check before error-exiting.
 	if (theFlag)
 	{
-		// This is a Hexadecimal string representation of ASCII values spelling out a phrase in Spanish.
+		// This is a Hexadecimal string representation of ASCII values.
+		// For further fun, the ASCII values translate to a phrase in Spanish, "¡Jeez Causey! Stop breaking my program."
 		ch("C2A1436172617920436175736579212044656A6520646520726F6D706572206D692070726F6772616D612E0D0A\0");
 	}
 	// Call exit with a non-zero value to indicate error.
