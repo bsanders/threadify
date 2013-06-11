@@ -112,7 +112,7 @@ int main(int argc, char* argv[])
 	pthread_t producer_threads[num_producers], consumer_threads[num_consumers];
 
 	// Create threads for producers and consumers, based on the args
-	// Check the return value of the threads as we create them
+	// Check the return value of the threads as we create them, in case we can't create anymore threads (!)
 	for(int i = 0; i < num_producers; i++)
 	{
 		if (pthread_create(&producer_threads[i], NULL, producer, NULL) != 0)
