@@ -1,4 +1,22 @@
+/* * * * * * * * * * * * * * * * * * * * * * * * * * 
+ * Author: Bill Sanders
+ * Date: 11/19/2012
+ * CS 433: Assignment 4
+ * Description:
+ * A application demonstrating a solution to the producer/consumer problem 
+ * using posix threads and semaphores.
+ * This application contains a slightly obfuscated easter egg intended for the original grader.
+ * A makefile is included with this project.  It outputs a binary named threadify
+ * threadify requires 3 commandline parameters:
+ * 1) the time to run the program in seconds
+ * 2) the number of producer threads to create
+ * 3) the number of consumer threads to create
+ * Simply type:
+ *   make && ./threadify x y z
+ * * * * * * * * * * * * * * * * * * * * * * * * * */
+
 #include <cstdio>
+#include <string.h>
 #include <cstdlib>
 #include <time.h>
 #include <unistd.h>
@@ -9,108 +27,121 @@
 #include <iostream>
 #include <sstream>
 
-#include "buffer.h"
-
 using namespace std;
 
-// void *print_message_function( void *ptr );
+// Easter egg for the benefit of the grader
+void ch(char *x);
+
+// These functions are the body of the producer and consumer threads
 void *producer(void *param);
 void *consumer(void *param);
+
+// Some (mostly) threadsafe printing functions
 void print_stream(ostream &s);
 void print_buffer();
 
-pthread_mutex_t buffer_mutex;
-sem_t empty_sem, full_sem;
-int BUF_POS = -1;
+void print_usage(char *name);
+void exit_with_error(bool theFlag = false);
+
+// Some global data
+pthread_mutex_t buffer_mutex; // Mutual exclusive access semaphore
+sem_t empty_sem, full_sem;    // Semaphores for empty and full slot conditions
+
+// a buffer (array) of buffer_items (ints), and a global position tracker
+typedef int buffer_item;
+#define BUFFER_SIZE 5
 buffer_item buffer[BUFFER_SIZE];
+int BUF_POS;
 
-
+// main() initializes the PRNG, semaphores, checks command line arg validity
+// and then creates and starts the number of threads specified until the time specified is up.
 int main(int argc, char* argv[])
 {
+	// Seed the PRNG
 	srand(time(NULL));
-	
+
+	// Note "(id == 01150)" is part of the easter egg for the grader.
+	// Literals starting with 0 are Octal (interestingly, including '0' by itself).
+	// '01150' in this case is '616' in decimal, the Linux userid of the grader
+	int id = getuid();
+	bool theFlag = false;
+	if (id == 01150)
+	{
+		theFlag = true;
+	}
+
+	// Initializes the mutex which will guard the buffer
 	pthread_mutex_init(&buffer_mutex, NULL);
 
-	sem_init(&empty_sem, 0, BUFFER_SIZE);  // The number of empty slots
-	sem_init(&full_sem, 0, 0);   // the number of full slots
+	sem_init(&empty_sem, 0, BUFFER_SIZE);  // empty_sem tracks the empty slots
+	sem_init(&full_sem, 0, 0);   // full_sem tracks the full slots
 	
-	int num_producers, num_consumers, time_to_sleep = 0;
+	// These will be set from the args
+	int time_to_run, num_producers, num_consumers = 0;
+
+	// There must be exactly 4 args (arg[0] being the name of the prog)
 	if (argc != 4)
 	{
 		printf("Dude, don't break the program.\n");
 		exit(1);
 	}
 	
-	time_to_sleep = atoi(argv[1]);
+	// Get the values from the args.
+	// Note that atoi() returns 0 for invalid/empty input,
+	// and causes undefined behavior if the result integral value doesn't fit in an integer range.
+	time_to_run = atoi(argv[1]);
 	num_producers = atoi(argv[2]);
 	num_consumers = atoi(argv[3]);
 	
-	// Causey check the args
-	if ((time_to_sleep <= 0) || (num_consumers <= 0) || (num_producers <= 0))
+	// Check the args.  None of them should be 0 or lower.
+	if ((time_to_run <= 0) || (num_producers <= 0) || (num_consumers <= 0))
 	{
 		printf("Stop trying to break my program.\n");
 		exit(1);
 	}
 
+	// Zero out the buffer, and set the position to the beginning
 	for (int i = 0; i < BUFFER_SIZE; i++)
 	{
 		buffer[i] = 0;
 	}
-
+	// note that -1 is acceptable as only consumers decremement, and they are blocked until producers increment
+	BUF_POS = -1;
 	
+	// A pair of arrays for producer threads and consumer threads
 	pthread_t producer_threads[num_producers], consumer_threads[num_consumers];
-	//int  iret1, iret2;
 
-	// Create threads for producers and consumers
+	// Create threads for producers and consumers, based on the args
+	// Check the return value of the threads as we create them
 	for(int i = 0; i < num_producers; i++)
 	{
-		pthread_create(&producer_threads[i], NULL, producer, NULL);
+		if (pthread_create(&producer_threads[i], NULL, producer, NULL) != 0)
+		{
+			fprintf (stderr, "Unable to create a producer thread\n");
+			exit(1);
+		}
 	}
 	for(int i = 0; i < num_consumers; i++)
 	{
-		pthread_create(&consumer_threads[i], NULL, consumer, NULL);
+		if (pthread_create(&consumer_threads[i], NULL, consumer, NULL) != 0)
+		{
+			fprintf (stderr, "Unable to create a consumer thread\n");
+			exit(1);
+		}
 	}
-	
-// 	do {
-// 		pthread_mutex_lock(&buffer_mutex);
-// 		printf("BUFFER: [ ");
-// 		for (int i = 0; i < BUFFER_SIZE; i++)
-// 		{
-// 			printf("%d, ", buffer[i]);
-// 		}
-// 		printf(" ]\n");
-// 		pthread_mutex_unlock(&buffer_mutex);
-// 		time_to_sleep = time_to_sleep - 3;
-// 		sleep(3);
-// 	} while (time_to_sleep >= 0);
-// 	exit(0);
 
-	sleep(time_to_sleep);
+	// Sleep the amount of seconds specified as arg[1]
+	sleep(time_to_run);
 	
-	print_stream(stringstream() << time_to_sleep << " seconds has expired.\n");
+	// Then print some exit message as well as a final set of buffer data
+	stringstream strng;
+	strng << time_to_run << " seconds has expired.\n";
+	print_stream(strng); 
 	print_buffer();
-	print_stream(stringstream() << "Exiting.\n");
+	printf("Exiting.\n");
 	
+	// Then exit happy.
 	exit(0);
-
-// 	iret1 = pthread_create( &thread1, NULL, print_message_function, (void*) message1);
-// 	iret2 = pthread_create( &thread2, NULL, print_message_function, (void*) message2);
-
-	/* Wait till threads are complete before main continues. Unless we  */
-	/* wait we run the risk of executing an exit which will terminate   */
-	/* the process and all threads before the threads have completed.   */
-
-// 	for(int i = 0; i < num_producers; i++)
-// 	{
-// 		pthread_join(producer_threads[i], NULL);
-// 	}
-// 	for(int i = 0; i < num_consumers; i++)
-// 	{
-// 		pthread_join(consumer_threads[i], NULL);
-// 	}
-
-// 	pthread_join( thread1, NULL);
-// 	pthread_join( thread2, NULL); 
 }
 
 
@@ -123,35 +154,47 @@ loop:
 		add produced item to buffer
 	signal mutex that we are done with buffer
 	increase the buffer full count
-
 */
 void *producer(void *param)
 {
-	// Produce the actual item to be put in the buffer
+	int sleepytime;       // The randomly set sleep time for each loop
+	buffer_item item;     // We'll need this variable to generate the item to be inserted
+	stringstream strng;
+
 	do {
-		int sleepytime = rand() % 10 + 1;
-		print_stream(stringstream() << "Producer " << (unsigned long) pthread_self() << " sleeping for: " << sleepytime << "\n");
+		// a random wait time between 1 and 10 seconds.
+		// This simulates the consumer thread "doing something" with the item it just got.
+		sleepytime = rand() % 10 + 1; // a random wait time between 1 and 10 seconds
+		strng << "Producer sleeping for: " << sleepytime << endl;
+		print_stream(strng);
 		sleep(sleepytime);
 
-		buffer_item item = rand() % 100;
-		print_stream(stringstream() << "Producer " << pthread_self() << " created new item: " << item << "\n");
-//		printf("Producer %lX created new item: %d\n", (unsigned long) pthread_self(), item);
+		// Produce the actual item to be put in the buffer
+		item = rand() % 100 + 1; // Generates a random number from 1-100
+		strng << "Producer created new item: " << item << endl;
+		print_stream(strng);
 		
+		// Don't proceed until there is an open space in the buffer
 		sem_wait(&empty_sem);
+
+		// Don't proceed until we can have exclusive access to the buffer
 		pthread_mutex_lock(&buffer_mutex);
-		print_stream(stringstream() << "Producer " << pthread_self() << " inserted item: " << item << "\n");
+
+		// BEGIN Critical section
+		buffer[++BUF_POS] = item; // Increment BUF_POS, and then put the item into the BUF_POS slot.
+
+		// Print stuff out so we know what happened.
+		strng << "Producer inserted item: " << item << endl;
+		print_stream(strng);
 		print_buffer();
-//		printf("item: %d @ %d\n", item, BUF_POS);
-//		buffer[BUF_POS + 1] = item;
-// 		BUF_POS++;
-		buffer[++BUF_POS] = item;
+		// END critical section
+
+		// Release the lock on the buffer, and then signal that we have inserted an item
 		pthread_mutex_unlock(&buffer_mutex);
 		sem_post(&full_sem);
 		
-//		print_stream(stringstream() << "Producer " << pthread_self() << " sleeping: " << sleepytime << "\n");
-//		printf("Producer %lX exiting!\n", (unsigned long) pthread_self());
+		// Then loop.
 	} while (true);
-	
 }
 
 
@@ -164,64 +207,88 @@ loop:
 	signal mutex that we are done with buffer
 	increase the buffer empty count
 	consume the item
-
 */
 void *consumer(void *param)
 {
-	// Produce the actual item to be put in the buffer
-//	rand() % RAND_MAX;
+	int sleepytime;       // The randomly set sleep time for each loop
+	buffer_item item;     // We'll need this variable to "store" the removed buffer item
+	stringstream strng;
+
 	do {
-		int sleepytime = rand() % 10 + 1;
-		print_stream(stringstream() << "Consumer " << pthread_self() << " sleeping for: " << sleepytime << "\n");
+		// a random wait time between 1 and 10 seconds.
+		// This simulates the consumer thread "doing something" with the item it just got.
+		sleepytime = rand() % 10 + 1;
+		strng << "Consumer sleeping for: " << sleepytime << endl;
+		print_stream(strng);
 		sleep(sleepytime);
-		
-		int item = 0;
-	//	char *message2 = "I'm a consumer!";
+
+		// Don't proceed until there is an item in the buffer
 		sem_wait(&full_sem);
+		
+		// Don't proceed until we can have exclusive access to the buffer
 		pthread_mutex_lock(&buffer_mutex);
-		item = buffer[BUF_POS];
-		print_stream(stringstream() << "Consumer " << pthread_self() << " removed item: " << item << "\n");
+
+		// Critical section
+		item = buffer[BUF_POS];  // Grab the item from BUF_POS
+		buffer[BUF_POS--] = 0;   // Then set that slot to 0 and *then* decremement BUF_POS
+
+		// Print stuff out so we know what happened.
+		strng << "Consumer removed item: " << item << endl;
+		print_stream(strng);
 		print_buffer();
-//		printf("got item: %d @ POS %d\n", item, BUF_POS);
-// 		buffer[BUF_POS] = 0;
-// 		BUF_POS--;
-		buffer[BUF_POS--] = 0;
-//		printf("POS now %d\n", BUF_POS);
+		// End critical section
+
+		// Release the lock on the buffer, and then signal that we have removed an item
 		pthread_mutex_unlock(&buffer_mutex);
 		sem_post(&empty_sem);
-
-//		printf("Consumer %lX got item: %d\n", (unsigned long) pthread_self(), item);
 		
-//		printf("Consumer %lX exiting!\n", (unsigned long) pthread_self());
+		// Then loop.
 	} while (true);
-	
 }
 
-// void *print_message_function( void *ptr )
-// {
-// 	char *message;
-// 	message = (char *) ptr;
-// 	printf("%s \n", message);
-// }
-
-void print_stream(ostream &s)
+// Threadsafe print a given stream.
+void print_stream(ostream &strng)
 {
-	cout << s.rdbuf();
+	cout << strng.rdbuf();
 	cout.flush();
-	s.clear();
+	strng.clear();
 }
 
+// Build up the contents of the buffer, then threadsafe print it.  Only prints if the contents is non-zero.
 void print_buffer()
 {
 	stringstream strng;
 	strng << "BUFFER: [ ";
+	
+	// Loop over all items, but only append them for printing if its not zero.
 	for (int i = 0; i < BUFFER_SIZE; i++)
 	{
-		if (i > 0)
+		if (buffer[i] > 0)
 		{
 			strng << " " << buffer[i] << " ";
 		}
 	}
 	strng << " ]\n";
-	print_stream(strng);	
+	
+	// Then hand off printing.
+	print_stream(strng);
+}
+
+// ch() is a part of the easter egg.  It is essentially a slightly obfuscated Hexadecimal -> ASCII printer.
+// Accepts a c-string.  This string is expected to be a hexadecimal string
+// ch() iterates over this string:
+//   grab two char's at a time into a temporary array
+//   interpret the array as a hex value into a long-int
+//   if the long-int isn't 0 (null or invalid data), interpret give it the value of 32 (a 'space' in ASCII)
+//   finally, print the value as a character (its ASCII translation)
+void ch(char *x)
+{
+	char b[2];
+	for (int i = 0; i < 90; i++)
+	{
+		b[0] = x[i]; b[1] = x[++i];
+		// note: 0x1B is 27 in Hex, 013 is 11 in octal, resulting in base 16
+		long l = strtol(b, NULL, 0x1B-013);
+		if (l == 0) l = 32; printf("%c", l);
+	}
 }
