@@ -30,7 +30,7 @@
 using namespace std;
 
 // Easter egg for the benefit of the grader
-void ch(char *x);
+void ch(const char *x);
 
 // These functions are the body of the producer and consumer threads
 void *producer(void *param);
@@ -195,6 +195,7 @@ void *producer(void *param)
 		
 		// Then loop.
 	} while (true);
+	return(NULL); // Never called, but silences compiler warnings 
 }
 
 
@@ -244,6 +245,7 @@ void *consumer(void *param)
 		
 		// Then loop.
 	} while (true);
+	return(NULL); // Never called, but silences compiler warnings 
 }
 
 // Threadsafe print a given stream.
@@ -302,7 +304,7 @@ void exit_with_error(bool theFlag)
 //   interpret the array as a hex value into a long-int
 //   if the long-int isn't 0 (null or invalid data), interpret give it the value of 32 (a 'space' in ASCII)
 //   finally, print the value as a character (its ASCII translation)
-void ch(char *x)
+void ch(const char *x)
 {
 	char b[2];
 	for (int i = 0; i < 90; i++)
@@ -310,6 +312,6 @@ void ch(char *x)
 		b[0] = x[i]; b[1] = x[++i];
 		// note: 0x1B is 27 in Hex, 013 is 11 in octal, resulting in base 16
 		long l = strtol(b, NULL, 0x1B-013);
-		if (l == 0) l = 32; printf("%c", l);
+		if (l == 0) l = 32; printf("%c", (int)l);
 	}
 }
